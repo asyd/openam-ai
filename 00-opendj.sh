@@ -1,6 +1,6 @@
 #/usr/bin/env bash
 
-# This script proceed to extraction of OpenAM Zip archive, deploy the war, and configure openAM
+# This script proceed to extraction of OpenDJ Zip archive and its configuration
 
 # Bruno Bonfils, <bbonfils@opencsi.com>
 # June 2011
@@ -11,6 +11,8 @@ required_commands=(unzip curl java ldapmodify)
 
 # Include common functions
 . ${common_dir}/functions.sh
+
+check_requirements_cmd
 
 config_file=$1
 backup_dir=$2
@@ -45,16 +47,7 @@ config_file=${basedir}/$config_file
 # Extract OpenDJ
 run_cmd "Extracting OpenDJ" unzip -d $OPENDJ_EXTRACT_DIR $OPENDJ_ARCHIVE
 
-tmpfile=$(mktemp $HOME/.XXXX)
 
-cat > $tmpfile <<EOF
-dn: cn=config
-changetype: modify
-replace: ds-cfg-single-structural-objectclass-behavior
-ds-cfg-single-structural-objectclass-behavior: accept
-EOF
-
-# If ldif_file is a file, use it as LDIF file
 if [[ -n $backup_dir ]] ; then
 	run_cmd_in_path "Setting up OpenDJ" $OPENDJ_EXTRACT_DIR/OpenDJ-$OPENDJ_VERSION \
 	./setup -n -b $OPENDJ_BASEDN -p $OPENDJ_PORT \
@@ -75,13 +68,23 @@ if [[ -n $backup_dir ]] ; then
 
 	run_cmd_in_path "Starting OpenDJ" $OPENDJ_EXTRACT_DIR/OpenDJ-$OPENDJ_VERSION ./bin/start-ds
 else
+	tmpfile=$(mktemp $HOME/.opendj-XXXX)
+
+	cat > $tmpfile <<EOF
+dn: cn=config
+changetype: modify
+replace: ds-cfg-single-structural-objectclass-behavior
+ds-cfg-single-structural-objectclass-behavior: accept
+EOF
+
 	run_cmd_in_path "Setting up OpenDJ" $OPENDJ_EXTRACT_DIR/OpenDJ-$OPENDJ_VERSION \
 	./setup -n -b $OPENDJ_BASEDN -a -p $OPENDJ_PORT \
 	--adminConnectorPort $OPENDJ_ADMIN_PORT -x $OPENDJ_JMX_PORT \
 	-w $OPENDJ_ROOT_PASSWORD
 	run_cmd "Allowing multiple structural objectClass in OpenDJ" ldapmodify -xh localhost -p $OPENDJ_PORT \
 		-D 'cn=Directory Manager ' -w $OPENDJ_ROOT_PASSWORD -f $tmpfile
+
+	run_cmd "Removing files" rm $tmpfile
 fi
 
 
-rm $tmpfile

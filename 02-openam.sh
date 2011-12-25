@@ -73,6 +73,8 @@ if [[ -n $backup_dir ]] ; then
 	fi
 
 else
+	echo "Initial install mode"
+	
 	if [[ -d $OPENAM_DATA_DIR ]]; then
 		echo "OpenAM data directory ($OPENAM_DATA_DIR) already exists, aborting."
 		exit 1
@@ -96,19 +98,59 @@ if [[ "$J2EE_NEED_TO_START" == "1" ]] ; then
 	run_cmd "Starting the J2EE Server" $J2EE_START_CMD
 fi
 
-wait_for_url "Waiting for OpenAM deployed" $J2EE_URL_START
+wait_for_url_pattern "Waiting for OpenAM deployed" "${J2EE_URL_START}/config/options.htm" "DemoConfiguration"
 
 # Sleep again 10 seconds, just in case
-echo -n "Sleeping 30 seconds: "
-sleep 30
+echo -n "Sleeping 5 seconds: "
+sleep 5
 echo "done."
 
+# Initial install mode
 if [[ ! -n $backup_dir ]] ; then
 	# Extract configurator tools
 	run_cmd "Extracting configurator tools" unzip -d $OPENAM_CONFIG_TOOLS_DIR $OPENAM_EXTRACT_DIR/$OPENAM_CONFIG_TOOLS_ARCHIVE
+	
+	# Create configurator config file
+	tmpfile=$(mktemp $HOME/.openam-XXXX)
+	cat <<EOF > $tmpfile
+SERVER_URL=$OPENAM_SERVER_URL
+DEPLOYMENT_URI=$OPENAM_DEPLOYMENT_URI
+BASE_DIR=$OPENAM_DATA_DIR
+locale=en_US
+PLATFORM_LOCALE=en_US
+AM_ENC_KEY=
+ADMIN_PWD=$OPENAM_ADMIN_PASSWORD
+AMLDAPUSERPASSWD=$OPENAM_URLAGENT_PASSWORD
+COOKIE_DOMAIN=$OPENAM_COOKIE_DOMAIN
+
+DATA_STORE=dirServer
+DIRECTORY_SSL=SIMPLE
+DIRECTORY_SERVER=localhost
+DIRECTORY_PORT=$OPENDJ_PORT
+ROOT_SUFFIX=$OPENDJ_BASEDN
+DS_DIRMGRDN=cn=Directory Manager
+DS_DIRMGRPASSWD=$OPENDJ_ROOT_PASSWORD
+
+LB_SITE_NAME=openam
+LB_PRIMARY_URL=${OPENAM_SERVER_URL}${OPENAM_DEPLOYMENT_URI}
+
+USERSTORE_TYPE=LDAPv3ForOpenDS
+USERSTORE_HOST=localhost
+USERSTORE_PORT=$OPENDJ_PORT
+USERSTORE_SUFFIX=$OPENDJ_BASEDN
+USERSTORE_MGRDN=cn=Directory Manager
+USERSTORE_PASSWD=$OPENDJ_ROOT_PASSWORD
+EOF
 	# Proceed to OpenAM configuration
-	run_cmd_in_path "Configuring OpenAM" $OPENAM_CONFIG_TOOLS_DIR java -jar $OPENAM_CONFIG_TOOLS_DIR/configurator.jar -f $OPENAM_CONFIG_FILE
+	run_cmd_in_path "Configuring OpenAM" $OPENAM_CONFIG_TOOLS_DIR java -jar $OPENAM_CONFIG_TOOLS_DIR/configurator.jar -f $tmpfile
+	if [[ ! -r ${OPENAM_DATA_DIR}/bootstrap ]] ; then
+		echo "Error while configuring OpenAM, try to run the following command by hand, and check J2EE logs:"
+		echo "java -jar $OPENAM_CONFIG_TOOLS_DIR/configurator.jar -f $tmpfile"
+		exit 1 
+	fi
 fi
+
+run_cmd "Purge files" rm $tmpfile
 
 # Extract admin tools
 run_cmd "Extracting admin tools" unzip -d $OPENAM_ADMIN_TOOLS_DIR $OPENAM_EXTRACT_DIR/$OPENAM_ADMIN_TOOLS_ARCHIVE
@@ -117,11 +159,9 @@ run_cmd "Extracting admin tools" unzip -d $OPENAM_ADMIN_TOOLS_DIR $OPENAM_EXTRAC
 run_cmd_in_path "Setting up admin tools" $OPENAM_ADMIN_TOOLS_DIR ./setup -p $OPENAM_DATA_DIR
 
 if [[ ! -n $backup_dir ]];  then
-	run_cmd "Shutting down J2EE server" $J2EE_STOP_CMD
-	run_cmd "Sleeping 10 seconds" sleep 10
-	run_cmd "Starting J2EE server" $J2EE_START_CMD
-	run_cmd "Sleeping 30 seconds" sleep 30
-	echo "$OPENDJ_ROOT_PASSWORD" > ~/.openssocfg/.password
-	chmod 400 ~/.openssocfg/.password
-	run_cmd_in_path "Setting up datastore" $OPENAM_ADMIN_TOOLS_DIR ./opensso/bin/ssoadm update-datastore -e '/' -m "OpenDS" -u amadmin -f ~/.openssocfg/.password -D $basedir/config/openam-datastore-configuration.properties
+	echo "Restarting OpenAM:"
+	run_cmd "  Shutting down J2EE server" $J2EE_STOP_CMD
+	run_cmd "  Sleeping 10 seconds" sleep 10
+	run_cmd "  Starting J2EE server" $J2EE_START_CMD
+	echo "done."
 fi

@@ -36,7 +36,11 @@ function run_cmd_in_path {
 function check_requirements_cmd {
 	for cmd in "${required_commands[@]}"
 	do
-		type -p $cmd >/dev/null 2>/dev/null || "$cmd is required, aborting"
+		type -p $cmd >/dev/null 2>/dev/null
+		if [[ $? > 0 ]] ; then 
+			echo "Command $cmd is required, aborting"
+			exit 1
+		fi
 	done
 }
 
@@ -53,15 +57,15 @@ function wait_for_url {
     echo "done."	
 }
 
-function wait_for_url_patterns {
+function wait_for_url_pattern {
 	message=$1
 	shift
 	echo -n "$message: "
-    curl -s --max-time 1 --connect-timeout 1 $1 > /dev/null;
+	curl -s -i --max-time 10 --connect-timeout 1 $1 | tr -d '\r' | grep -i $2 >/dev/null
     while [ $? -gt 0 ]; do
             echo -n "."
             sleep 1;
-	    curl -s -i --max-time 10 --connect-timeout 1 $1 | tr -d '\r' | grep $2
+	    	curl -s -i --max-time 10 --connect-timeout 1 $1 | tr -d '\r' | grep -i $2 >/dev/null
     done
     echo "done."	
 }
