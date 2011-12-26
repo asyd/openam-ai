@@ -7,4 +7,4 @@ OpenDJ and OpenAM in a silent way.
 Documentation
 =============
 
-Available (http://wiki.opencsi.com/public/bin/view/OpenAM/SilentInstallation "in english") and (http://wiki.opencsi.com/public/bin/view/OpenAM/InstallationCLI "in french").
+Available [in english](http://wiki.opencsi.com/public/bin/view/OpenAM/SilentInstallationd) and [in french](http://wiki.opencsi.com/public/bin/view/OpenAM/InstallationCLI).
